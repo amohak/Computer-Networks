@@ -7,21 +7,29 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
-#define SERVER_PORT 5432
 #define MAX_PENDING 5
 #define MAX_LINE 256
 
-int main()
+int main(int argc, char * argv[])
 {
 	struct sockaddr_in sin;
 	char buf[MAX_LINE];
 	unsigned int len;
-	int s, new_s;
+	int s, new_s, SERVER_PORT;
+	
+	if (argc==2) {
+		SERVER_PORT = atoi(argv[1]);
+	}
+	else
+	{
+		fprintf(stderr, "usage: outfile port\n");
+		exit(1);
+	}
 	
 	/* build address data structure */
 	memset((char *)&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
-	sin.sin_addr.s_addr = INADDR_ANY;
+	sin.sin_addr.s_addr = htonl(INADDR_ANY);
 	sin.sin_port = htons(SERVER_PORT);
 	
 	/* setup passive open */
@@ -40,14 +48,22 @@ int main()
 	listen(s, MAX_PENDING);
 	/* wait for connection, then receive and print text */
 	
+	int i=0;
 	while(1) {
-	if ((new_s = accept(s, (struct sockaddr *)&sin, &len)) < 0) {
-		perror("simplex-talk: accept");
-		exit(1);
-	}
-	
-	while (len = recv(new_s, buf, sizeof(buf), 0))
-		fputs(buf, stdout);
+		if ((new_s = accept(s, (struct sockaddr *)&sin, &len)) < 0) {
+			perror("simplex-talk: accept");
+			exit(1);
+		}
+		
+		while (len = recv(new_s, buf, sizeof(buf), 0))
+		{
+			// i = 0;
+			// while(buf[i]!='\0')
+			// 	printf("%c ",buf[i++]);
+			
+			fputs(buf, stdout);
+			memset(buf,'\0',len);
+		}
 		close(new_s);
 	}
 	return 0;
