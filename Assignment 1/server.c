@@ -34,7 +34,7 @@ int main(int argc, char * argv[])
 	}
 	else
 	{
-		fprintf(stderr, "usage: outfile port\n");
+		fprintf(stderr, "usage: outfile server_port\n");
 		exit(1);
 	}
 	
@@ -47,13 +47,13 @@ int main(int argc, char * argv[])
 	/* setup passive open */
 	if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0)
 	{
-		perror("simplex-talk: socket");
+		perror("Cannot create the socket");
 		exit(1);
 	}
 
 	if ((bind(s, (struct sockaddr *)&sin, sizeof(sin))) < 0)
 	{
-		perror("simplex-talk: bind");
+		perror("Unabe to bind");
 		exit(1);
 	}
 
@@ -148,21 +148,27 @@ int main(int argc, char * argv[])
 
 					if(!clientstatus) break;								// clientstatus - variable to tell the liveness of client
 				}
+
+				fclose(fp);
 			}
 
-			memset(custom,'\0',sizeof(custom));
-			if(recv(new_s,custom,sizeof(custom),0) <=0)
+			if(clientstatus)
 			{
-				clientstatus = 0;
-				break;
+				memset(custom,'\0',sizeof(custom));
+				if(recv(new_s,custom,sizeof(custom),0) <=0)
+				{
+					clientstatus = 0;
+					break;
+				}
+
+				if(send(new_s,file_prompt,strlen(file_prompt)+1,0)<0)			// send prompt for another message
+				{
+					clientstatus = 0;
+					break;
+				}
 			}
 
-			if(send(new_s,file_prompt,strlen(file_prompt)+1,0)<0)			// send prompt for another message
-			{
-				clientstatus = 0;
-				break;
-			}
-			fclose(fp);
+			else break;
 		}
 
 		close(new_s);

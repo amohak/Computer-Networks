@@ -28,7 +28,7 @@ int main(int argc, char * argv[])
 	}
 	
 	else {
-		fprintf(stderr, "usage: outfile host port\n");
+		fprintf(stderr, "usage: outfile host_ip server_port\n");
 		exit(1);
 	}
 	
@@ -99,7 +99,6 @@ int main(int argc, char * argv[])
 			}
 		}
 
-		memset(custom,'\0',sizeof(custom));
 		send(s,custom,sizeof(custom),0);
 	}
 
