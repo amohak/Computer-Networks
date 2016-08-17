@@ -416,6 +416,7 @@ ParsedRequest_parse(struct ParsedRequest * parse, const char *buf,
 	  return -1;
      }
 
+     parse->path = full_addr;								// parse->path added
      parse->version = full_addr + strlen(full_addr) + 1;
 
      if (parse->version == NULL) {
@@ -425,7 +426,7 @@ ParsedRequest_parse(struct ParsedRequest * parse, const char *buf,
 	  parse->buf = NULL;
 	  return -1;
      }
-     if (strncmp (parse->version, "HTTP/", 5)) {
+     if (strncmp (parse->version, "HTTP/1.1", 8)) {
 	  debug( "invalid request line, unsupported version %s\n", 
 		 parse->version);
 	  free(tmp_buf);
@@ -435,6 +436,8 @@ ParsedRequest_parse(struct ParsedRequest * parse, const char *buf,
      }
 
 
+     /* Parse protocol would've contained "http" in version 1.0 so not neede now
+
      parse->protocol = strtok_r(full_addr, "://", &saveptr);
      if (parse->protocol == NULL) {
 	  debug( "invalid request line, missing host\n");
@@ -442,8 +445,9 @@ ParsedRequest_parse(struct ParsedRequest * parse, const char *buf,
 	  free(parse->buf);
 	  parse->buf = NULL;
 	  return -1;
-     }
+     }*/
      
+     /*
      const char *rem = full_addr + strlen(parse->protocol) + strlen("://");
      size_t abs_uri_len = strlen(rem);
 
@@ -462,9 +466,9 @@ ParsedRequest_parse(struct ParsedRequest * parse, const char *buf,
 	  free(parse->buf);
 	  parse->buf = NULL;
 	  return -1;
-     }
+     }*/
 
-     parse->path = strtok_r(NULL, " ", &saveptr);
+     /*parse->path = strtok_r(NULL, " ", &saveptr);
      if (parse->path == NULL) {          // replace empty abs_path with "/"
 	  int rlen = strlen(root_abs_path);
 	  parse->path = (char *)malloc(rlen + 1);
@@ -512,7 +516,7 @@ ParsedRequest_parse(struct ParsedRequest * parse, const char *buf,
 	       return -1;
 	  }
      }
-
+*/
    
      /* Parse headers */
      int ret = 0;
