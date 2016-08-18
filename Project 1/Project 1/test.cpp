@@ -59,6 +59,7 @@ void prepare_response(char *connection_status,int content_length, string content
 	strcat(response_header,"Content-type : ");
 	strcat(response_header,content_type.c_str());
 	strcat(response_header,CRLF);
+	strcat(response_header,CRLF);
 	
 	delete[] content_length_temp;
 }
