@@ -48,11 +48,17 @@ int main(int argc, char * argv[])
 	}
 	
 	/* main loop: get and send lines of text */
-	int i;
-	while (fgets(buf, sizeof(buf), stdin)) {
+	FILE * stream = fdopen(s,"r+");
+
+	while (fread(buf, sizeof(char), sizeof(buf), stdin)) {
+		printf("WTF\n");
 		buf[MAX_LINE-1] = '\0';
+		// printf("Reached here\n");
 		len = strlen(buf);
+		// printf("%s\n",buf);
+		// printf("%d\n",len);
 		send(s, buf, len, 0);
+		printf("Sent\n");
 	}
 
 	return 0;

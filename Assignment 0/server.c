@@ -47,23 +47,25 @@ int main(int argc, char * argv[])
 
 	listen(s, MAX_PENDING);
 	/* wait for connection, then receive and print text */
-	
-	int i=0;
+
+	// int i=0;
 	while(1) {
 		if ((new_s = accept(s, (struct sockaddr *)&sin, &len)) < 0) {
 			perror("simplex-talk: accept");
 			exit(1);
 		}
 		
-		while (len = recv(new_s, buf, sizeof(buf), 0))
+		printf("Found a new connection\n");
+
+		while(fwrite(buf, sizeof(char), sizeof(buf), stdout))
+		// while (len = recv(new_s, buf, sizeof(buf), 0))
 		{
 			// i = 0;
 			// while(buf[i]!='\0')
 			// 	printf("%c ",buf[i++]);
-			
-			fputs(buf, stdout);
 			memset(buf,'\0',len);
 		}
+
 		close(new_s);
 	}
 	return 0;
