@@ -35,3 +35,4 @@ char * extract_type(char *filename);
 
 void list_dir(DIR *dp, char *directory_list, char *dir_path);
 
+void list_dir_file(DIR *dp, FILE *fp, char *dir_path);

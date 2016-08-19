@@ -11,7 +11,7 @@ string MediaType(char * a)
 	else if(strcmp(a,"txt")==0) return "text/plain";
 	else if(strcmp(a,"jpeg")==0) return "image/jpeg";
 	else if(strcmp(a,"jpg")==0) return "image/jpeg";
-	else if(strcmp(a,"gif")==0) return "text/gif";
+	else if(strcmp(a,"gif")==0) return "image/gif";
 	else if(strcmp(a,"pdf")==0) return "Application/pdf";
 	else return "Application/octet-stream";
 }
@@ -122,6 +122,34 @@ void list_dir(DIR *dp, char *directory_list, char *dir_path)
 				strcat(directory_list,"\">");
 				strcat(directory_list,ep->d_name);
 				strcat(directory_list,"</a><br>");
+			}
+			(void) closedir (dp);
+		}
+	else
+		perror ("Couldn't open the directory");
+}
+
+void list_dir_file(DIR *dp, FILE *fp, char *dir_path)
+{
+	struct dirent *ep;
+	if (dp != NULL)
+		{
+			while (ep = readdir(dp))
+			{
+				fprintf(fp,"<a href=\"/");
+				// strcat(directory_list,"<a href=\"/");
+				fprintf(fp,"%s",dir_path);
+				// strcat(directory_list,dir_path);
+				fprintf(fp,"/");
+				// strcat(directory_list,"/");
+				fprintf(fp,"%s",ep->d_name);
+				// strcat(directory_list,ep->d_name);
+				fprintf(fp,"\">");
+				// strcat(directory_list,"\">");
+				fprintf(fp,"%s",ep->d_name);
+				// strcat(directory_list,ep->d_name);
+				fprintf(fp,"</a><br>");
+				// strcat(directory_list,"</a><br>");
 			}
 			(void) closedir (dp);
 		}
