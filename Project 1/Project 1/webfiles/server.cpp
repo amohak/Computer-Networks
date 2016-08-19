@@ -34,7 +34,7 @@ string htmlfooter = "</BODY><HTML>";
 
 int main(int argc, char * argv[])
 {
-	int s,pid,new_s,SERVER_PORT;
+	int s,pid,SERVER_PORT;
 
 	if (argc==2)
 		SERVER_PORT = atoi(argv[1]);
@@ -72,6 +72,8 @@ int main(int argc, char * argv[])
 
 	while(1)
 	{
+		int new_s;
+
 		len = 10;
 		if ((new_s = accept(s, (struct sockaddr *)&sin, &len)) < 0) {
 			perror("error in accepting the connection");
@@ -79,126 +81,133 @@ int main(int argc, char * argv[])
 		}
 
 		connection_count++;
-		cout << "Connection #" << connection_count << endl;
 		
-		while((pid = fork()) == 0)
+		if(fork() == 0)
 		{
 			cout << "Inside the child of Connection #" << connection_count << "\n";
-
-			char *connection_status;
-			int content_length, retval, type;
-			char *temp_type;
-			struct stat size_info, type_info;
-			char *response_header = (char *)malloc(MAX_BUFFER_SIZE);
-			char *requestmessage = (char *)malloc(MAX_BUFFER_SIZE);
-
-			if(recv(new_s,requestmessage,MAX_BUFFER_SIZE,0) <= 0){
-				exit(1);
-			}
-
-			int l = strlen(requestmessage);
-			requestmessage[l] = '\0'; 
-
-			int isHEAD = 0;
-			ParsedRequest *req = ParsedRequest_create();
 			
-			if ((retval = ParsedRequest_parse(req, requestmessage, l)) < 0) {
-				if(retval == -2)
-					status_line("HTTP/1.1",501,response_header);
-				else
-					status_line("HTTP/1.1",400,response_header);
-
-				retval = abs(retval) - 1;
-				prepare_response("keep-alive",strlen(ParsingFailed[retval]),"txt",response_header);
-				send_new(new_s,response_header,strlen(response_header));
-				send_new(new_s,ParsingFailed[retval],strlen(ParsingFailed[retval]));
-				continue;
-			}
-
-			if(strcmp(req->method,"HEAD")==0) isHEAD = 1;
-
-			ParsedHeader header;
-			for(int i=0;i<req->headersused;i++)
+			while(1)
 			{
-				header = *(req->headers+i);
-				if(strcmp(LowerCase(header.key),"connection")==0)
-				{
-					connection_status = (char *)malloc(strlen(header.value));
-					strcpy(connection_status,header.value);
-				}
-			}
 
-			if(req->path[strlen(req->path)-1]=='/')							// trim the terminal slash character
-				req->path[strlen(req->path)-1] = '\0';
-			
-			type = stat(req->path,&type_info);
+				char *connection_status;
+				int content_length, retval, type;
+				char *temp_type;
+				struct stat size_info, type_info;
+				char *response_header = (char *)malloc(MAX_BUFFER_SIZE);
+				char *requestmessage = (char *)malloc(MAX_BUFFER_SIZE);
 
-			int file_descriptor;
-
-			int f = open(req->path,O_RDONLY);
-
-			if(type != 0)
-			{
-				status_line(req->version,404,response_header);
-				prepare_response(connection_status,strlen(BadRequestMessage),"txt",response_header);
-				send_new(new_s,response_header,strlen(response_header));
-				if(!isHEAD)
-					send_new(new_s,BadRequestMessage,strlen(BadRequestMessage));
-			}
-
-			else
-			{
-				status_line(req->version,200,response_header);
-
-				if(S_ISREG(type_info.st_mode))
-				{
-					file_descriptor = f;
-					temp_type = extract_type(req->path);
-				}
-
-				if(S_ISDIR(type_info.st_mode))
-				{
-					DIR * dir = opendir(req->path);
-					FILE *fp = fopen("directory_list.html","w");
-					
-					if(fp == NULL)
-						exit(1);
-					
-					fprintf(fp,"%s",htmlheader.c_str());
-					list_dir_file(dir,fp,req->path);
-					fprintf(fp,"%s",htmlfooter.c_str());
-					fclose(fp);
-
-					file_descriptor = open("directory_list.html",O_RDONLY);
-					temp_type = "html";
-				}
-
-				if(fstat(file_descriptor,&size_info) < 0)
-				{
-					perror("Error in accessing file stats");
+				if(recv(new_s,requestmessage,MAX_BUFFER_SIZE,0) <= 0){
 					exit(1);
 				}
 
-				content_length =  size_info.st_size;
-				string content_type = MediaType(temp_type);
+				int l = strlen(requestmessage);
+				requestmessage[l] = '\0'; 
 
-				prepare_response(connection_status,content_length,content_type,response_header);				
-				send_new(new_s,response_header,strlen(response_header));
-				
-				if(!isHEAD)
-					sendfile_new(new_s,file_descriptor,content_length);
+				int isHEAD = 0;
+				ParsedRequest *req = ParsedRequest_create();
 
-				if(S_ISDIR(type_info.st_mode))
-				{
-					int ret = remove("directory_list.html");
-					if(ret != 0) 
-						exit(1);
+				if ((retval = ParsedRequest_parse(req, requestmessage, l)) < 0) {
+					if(retval == -2)
+						status_line("HTTP/1.1",501,response_header);
+					else
+						status_line("HTTP/1.1",400,response_header);
+
+					retval = abs(retval) - 1;
+					prepare_response("keep-alive",strlen(ParsingFailed[retval]),"txt",response_header);
+					send_new(new_s,response_header,strlen(response_header));
+					send_new(new_s,ParsingFailed[retval],strlen(ParsingFailed[retval]));
+					continue;
 				}
 
-				if(strcmp(connection_status,"close")==0)
+				if(strcmp(req->method,"HEAD")==0) isHEAD = 1;
+
+				ParsedHeader header;
+				for(int i=0;i<req->headersused;i++)
 				{
-					close(new_s);
-					break;
+					header = *(req->headers+i);
+					if(strcmp(LowerCase(header.key),"connection")==0)
+					{
+						connection_status = (char *)malloc(strlen(header.value));
+						strcpy(connection_status,header.value);
+					}
+				}
+
+				if(connection_status == NULL)
+					connection_status = "keep-alive";
+
+
+				if(req->path[strlen(req->path)-1]=='/')							// trim the terminal slash character
+					req->path[strlen(req->path)-1] = '\0';
+				
+				type = stat(req->path,&type_info);
+
+				int file_descriptor;
+
+				int f = open(req->path,O_RDONLY);
+
+				if(type != 0)
+				{
+					status_line(req->version,404,response_header);
+					prepare_response(connection_status,strlen(BadRequestMessage),"txt",response_header);
+					send_new(new_s,response_header,strlen(response_header));
+					if(!isHEAD)
+						send_new(new_s,BadRequestMessage,strlen(BadRequestMessage));
+				}
+
+				else
+				{
+					status_line(req->version,200,response_header);
+
+					if(S_ISREG(type_info.st_mode))
+					{
+						file_descriptor = f;
+						temp_type = extract_type(req->path);
+					}
+
+					if(S_ISDIR(type_info.st_mode))
+					{
+						DIR * dir = opendir(req->path);
+						FILE *fp = fopen("directory_list.html","w");
+						
+						if(fp == NULL)
+							exit(1);
+
+						fprintf(fp,"%s",htmlheader.c_str());
+						list_dir_file(dir,fp,req->path);
+						fprintf(fp,"%s",htmlfooter.c_str());
+						fclose(fp);
+
+						file_descriptor = open("directory_list.html",O_RDONLY);
+						temp_type = "html";
+					}
+
+					if(fstat(file_descriptor,&size_info) < 0)
+					{
+						perror("Error in accessing file stats");
+						exit(1);
+					}
+
+					content_length =  size_info.st_size;
+					string content_type = MediaType(temp_type);
+
+					prepare_response(connection_status,content_length,content_type,response_header);				
+					send_new(new_s,response_header,strlen(response_header));
+					
+					if(!isHEAD)
+						sendfile_new(new_s,file_descriptor,content_length);
+
+					if(S_ISDIR(type_info.st_mode))
+					{
+						int ret = remove("directory_list.html");
+						if(ret != 0)
+							exit(1);
+					}
+
+					if(strcmp(connection_status,"close")==0)
+					{
+						close(new_s);
+						break;
+					}
 				}
 			}
 		}

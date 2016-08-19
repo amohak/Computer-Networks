@@ -1,7 +1,7 @@
 #include "book_keeping.h"
 
 const char CRLF[] = "\r\n";
-
+char InternalServerError[] = "Interna Server Occur Occured.\0";
 map<int, string> ReasonPhrase;
 
 string MediaType(char * a)
@@ -61,7 +61,7 @@ void send_new(int sock,char *response_header,int len)
 	int sent_bytes = 0;
 	int temp = 0;
 
-	while((temp = send(sock,response_header+sent_bytes,rem_bytes,0)) > 0 && rem_bytes > 0) 
+	while((rem_bytes > 0) && (temp = send(sock,response_header+sent_bytes,rem_bytes,0)) > 0) 
 	{
 		rem_bytes -= temp;
 		sent_bytes += temp;
@@ -78,9 +78,14 @@ void send_new(int sock,char *response_header,int len)
 void sendfile_new(int sock,int f,int filesize)
 {
 	long int sent_bytes = 0;
+	long int temp = 0;
 	int rem_bytes = filesize;
 
-	while(((sent_bytes = sendfile(sock,f,&sent_bytes,rem_bytes)) > 0) && (rem_bytes > 0)) rem_bytes -= sent_bytes;
+	while((rem_bytes > 0) && ((temp = sendfile(sock,f+sent_bytes,NULL,rem_bytes)) > 0))
+	{ 
+		rem_bytes -= sent_bytes;
+		sent_bytes += temp;
+	}
 
 	if(sent_bytes < 0)
 	{
@@ -137,22 +142,24 @@ void list_dir_file(DIR *dp, FILE *fp, char *dir_path)
 			while (ep = readdir(dp))
 			{
 				fprintf(fp,"<a href=\"/");
-				// strcat(directory_list,"<a href=\"/");
 				fprintf(fp,"%s",dir_path);
-				// strcat(directory_list,dir_path);
 				fprintf(fp,"/");
-				// strcat(directory_list,"/");
 				fprintf(fp,"%s",ep->d_name);
-				// strcat(directory_list,ep->d_name);
 				fprintf(fp,"\">");
-				// strcat(directory_list,"\">");
 				fprintf(fp,"%s",ep->d_name);
-				// strcat(directory_list,ep->d_name);
 				fprintf(fp,"</a><br>");
-				// strcat(directory_list,"</a><br>");
 			}
 			(void) closedir (dp);
 		}
 	else
 		perror ("Couldn't open the directory");
+}
+
+void InternalServerErrorHandle(int sock, char *response_header)
+{
+	memset(response_header,'\0',strlen(response_header));
+	status_line("HTTP/1.1",500,response_header);
+	prepare_response("keep-alive",strlen(InternalServerError),"text/plain",response_header);
+	send_new(sock,response_header,strlen(response_header));
+	send_new(sock,InternalServerError,strlen(InternalServerError));
 }
