@@ -20,8 +20,6 @@ using namespace std;
 #define MSGRESLEN 8092
 #define MAX_BUFFER_SIZE 1000000
 
-char buf[MAX_BUFFER_SIZE];
-
 int main(int argc, char * argv[]) 
 {
 	int s,SERVER_PORT;
@@ -53,7 +51,6 @@ int main(int argc, char * argv[])
 	}
 
 	listen(s, MAX_PENDING);
-
 	while(1)
 	{
 
@@ -65,6 +62,7 @@ int main(int argc, char * argv[])
 			perror("error in accepting the connection");
 			exit(1);
 		}
+		
 		
 		/* As soon as a client is connected, create a thread to serve the client */
 
@@ -82,51 +80,41 @@ int main(int argc, char * argv[])
 			ParsedRequest *req = ParsedRequest_create();
 
 			if (ParsedRequest_parse(req, requestmessage, l) < 0) {
+				char *buf = (char *)malloc(100);
+				strcat(buf, "HTTP/1.0 500 Internal Error\r\n\r\n Internal Error Occured\n");
+				// cout << buf << "\n";
+				send_new(new_s,buf,strlen(buf));
+				close(new_s);
+				exit(1);
 			}
 
-			int isConnection = 0;
-			
-			ParsedHeader header;
-			for(int i=0;i<(int)req->headersused;i++)
-			{
-				header = *(req->headers+i);
-				if(strcmp(LowerCase(header.key),"connection")==0)
-				{
-					isConnection = 1;
-					memset(header.value,'\0',strlen(header.value));
-					strcpy(header.value,"close");
-				}
-
-				strcat(headers,header.key);
-				strcat(headers," ");
-				strcat(headers,header.value);
-				strcat(headers,"\r\n");
-			}
-
-			strcat(headers,"\r\n");
-
-			char *method = req->method;
-			char *abspath = req->path;
-			char *ver = req->version;
-			char *host = req->host;
-			char *port_num = req->port;
-			
 			if(req->port == NULL)
-				{
-					port_num = (char *)malloc(4);
-					strcpy(port_num,"80");
-				} 
+			{	
+				req->port = (char *)malloc(3);				// Is it really needed? Yes, Indeed!
+				strcpy(req->port,"80");
+			}
+
+			if (ParsedHeader_set(req, "Connection", "close") < 0){
+				perror("set header key not working\n");
+				exit(1);
+			}
+
+			char host_address[1000];
+			strcat(host_address,req->host);
+			strcat(host_address,":");
+			strcat(host_address,req->port);
+
+			if (ParsedHeader_set(req, "Host",host_address) < 0){
+				perror("set header key not working\n");
+				exit(1);
+			}
+
+			ParsedRequest_unparse_headers(req, headers, sizeof(headers));
+
+			prepare_request(req->method,req->path,req->version,headers,request_to_server);
 			
-			prepare_request(method,abspath,ver,host,port_num,request_to_server);
-
-			if(!isConnection)
-				strcat(request_to_server,"Connection : close\n");
-
-			// printf("%s\n",request_to_server);
-
-			strcat(request_to_server,headers);
+			// cout << request_to_server << "\n";			
 			
-
 			/* Now the proxy acts as the client and will be sending the request to the server */
 
 			struct hostent *hp;
@@ -136,8 +124,9 @@ int main(int argc, char * argv[])
 			memset((char *)&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			memcpy((char *)&sin.sin_addr, hp->h_addr, hp->h_length);
-			sin.sin_port = htons(atoi(port_num));
+			sin.sin_port = htons(atoi(req->port));
 			
+
 			int client_socket;
 			if ((client_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
 				perror("simplex-talk: socket");
@@ -150,17 +139,18 @@ int main(int argc, char * argv[])
 				exit(1);
 			}
 
-			send_new(client_socket, requestmessage, strlen(requestmessage));
+			// cout << requestmessage << "\n";
 
-			memset(buf,'\0',sizeof(buf));
+			send_new(client_socket, requestmessage, strlen(requestmessage));
+				
+			char *buf = (char *)malloc(MAX_BUFFER_SIZE);
 
 			int recv_len = 0, bytes_received = 0;
-
-			while((recv_len = recv(client_socket, buf + bytes_received, sizeof(buf), 0))>0)
+			while((recv_len = recv(client_socket, buf + bytes_received, MAX_BUFFER_SIZE - 1 - bytes_received, 0))>0)
 			{
 				bytes_received += recv_len;
-				// cout << "Received Length : " << recv_len << "\n" << "Bytes Received : " << bytes_received << "\n";
-				// cout << buf << "\n";
+				// cout << "Received Length : " << recv_len << "\nBytes Received : " << bytes_received << "\n" << "Buffer\n";
+				// cout << "Buffer Length : " << strlen(buf);
 			}
 
 			// cout << "Receive Length : " << recv_len << "\n";
@@ -169,10 +159,10 @@ int main(int argc, char * argv[])
 				perror("Error in socket connection");
 				exit(1);
 			}
-			// cout << "Length Received : " << recv_len << "\n\n";
-			// cout << buf << "\n" << strlen(buf);
 
-			send_new(new_s,buf,strlen(buf));
+			// cout << buf << "\n\nLength of the buffer : " << strlen(buf);
+
+			send_new(new_s,buf,bytes_received);
 
 			close(client_socket);
 			close(new_s);

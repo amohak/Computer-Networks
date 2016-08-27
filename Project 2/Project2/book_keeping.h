@@ -24,7 +24,7 @@ void initialise_Message();
 void status_line(char *version, int status_code, char * buf);
 
 /* This function prepares the response header to be sent to the client using several paramenters) */
-void prepare_request(char *method,char *abspath, char *ver,char *host, char* port, char *requestmessage);
+void prepare_request(char *method,char *abspath, char *ver, char *headers, char *requestmessage);
 
 /* This function sends the string using send(), but in a loop to ensure completion of send process */
 void send_new(int sock,char *response_header,int len);

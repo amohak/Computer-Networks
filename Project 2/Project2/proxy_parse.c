@@ -103,9 +103,10 @@ int ParsedHeader_remove(struct ParsedRequest *pr, const char *key)
 }
 
 
-/* modify the header with given key, giving it a new value
- * return 1 on success and 0 if no such header found
- * 
+ // modify the header with given key, giving it a new value
+ // * return 1 on success and 0 if no such header found
+ // * 
+
 int ParsedHeader_modify(struct ParsedRequest *pr, const char * key, 
 			const char *newValue)
 {
@@ -124,7 +125,7 @@ int ParsedHeader_modify(struct ParsedRequest *pr, const char * key,
      }
      return 0;
 }
-*/
+
 
 /*
   ParsedHeader Private Methods

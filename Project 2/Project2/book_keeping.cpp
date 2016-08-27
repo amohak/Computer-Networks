@@ -36,7 +36,7 @@ void status_line(char *version, int status_code, char * buf)
 	strcat(buf,ReasonPhrase[status_code].c_str());
 	strcat(buf,CRLF);
 }
-void prepare_request(char *method,char *abspath, char *ver,char *host, char *port, char *requestmessage)
+void prepare_request(char *method,char *abspath, char *ver, char *headers, char *requestmessage)
 {
 	strcat(requestmessage,method);
 	strcat(requestmessage," ");
@@ -44,11 +44,7 @@ void prepare_request(char *method,char *abspath, char *ver,char *host, char *por
 	strcat(requestmessage," ");
 	strcat(requestmessage,ver);
 	strcat(requestmessage,CRLF);
-	strcat(requestmessage,"Host : ");
-	strcat(requestmessage,host);
-	strcat(requestmessage,":");
-	strcat(requestmessage,port);
-	strcat(requestmessage,CRLF);
+	strcat(requestmessage,headers);
 }
 /*void prepare_response(char *connection_status,int content_length, string content_type, char *response_header)
 {
