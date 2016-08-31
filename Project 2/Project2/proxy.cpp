@@ -16,9 +16,16 @@
 
 using namespace std;
 
+int childCount = 0;
+void fun(int x)
+{
+	childCount--;
+}
+
 #define MAX_PENDING 20
-#define MSGRESLEN 8092
-#define MAX_BUFFER_SIZE 1000000
+#define MSGRESLEN 8192
+#define MAX_BUFFER_SIZE 8192
+#define MAX_CHILD 20
 
 int main(int argc, char * argv[]) 
 {
@@ -51,21 +58,35 @@ int main(int argc, char * argv[])
 	}
 
 	listen(s, MAX_PENDING);
+	struct sigaction sigchld_action;
+	sigchld_action.sa_handler = fun;
+	sigchld_action.sa_flags = SA_NOCLDWAIT;
+
+	sigaction(SIGCHLD, &sigchld_action, NULL);
+
+	int stat;
 	while(1)
 	{
 
 		/* For the first part, the proxy acts as the server accepting requests from the client */
 
 		int new_s;
+		pid_t pid;
 		len = 10;
 		if ((new_s = accept(s, (struct sockaddr *)&sin, &len)) < 0) {
-			perror("error in accepting the connection");
-			exit(1);
+			// perror("error in accepting the connection");
+			continue;
 		}
 		
 		
-		/* As soon as a client is connected, create a thread to serve the client */
+		childCount++ ;
+		while(childCount > MAX_CHILD)
+		{
+			wait(&stat);
+		}
 
+		cout << "No. of children now: " << childCount << "\n";
+		/* As soon as a client is connected, create a thread to serve the client */
 		if(fork() == 0)
 		{
 			char *requestmessage = (char *)malloc(MSGRESLEN);			// contains request line, and optionally, connection status and host address
@@ -82,16 +103,9 @@ int main(int argc, char * argv[])
 			if (ParsedRequest_parse(req, requestmessage, l) < 0) {
 				char *buf = (char *)malloc(100);
 				strcat(buf, "HTTP/1.0 500 Internal Error\r\n\r\n Internal Error Occured\n");
-				// cout << buf << "\n";
 				send_new(new_s,buf,strlen(buf));
 				close(new_s);
 				exit(1);
-			}
-
-			if(req->port == NULL)
-			{	
-				req->port = (char *)malloc(3);				// Is it really needed? Yes, Indeed!
-				strcpy(req->port,"80");
 			}
 
 			if (ParsedHeader_set(req, "Connection", "close") < 0){
@@ -101,8 +115,17 @@ int main(int argc, char * argv[])
 
 			char host_address[1000];
 			strcat(host_address,req->host);
-			strcat(host_address,":");
-			strcat(host_address,req->port);
+			
+			if(req->port != NULL)
+			{
+				strcat(host_address,":");
+				strcat(host_address,req->port);
+			}
+			else
+			{
+				req->port = (char *)malloc(3);
+				strcpy(req->port,"80");
+			}
 
 			if (ParsedHeader_set(req, "Host",host_address) < 0){
 				perror("set header key not working\n");
@@ -129,44 +152,37 @@ int main(int argc, char * argv[])
 
 			int client_socket;
 			if ((client_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
-				perror("simplex-talk: socket");
+				perror("error in creating socket");
 				exit(1);
 			}
 			
 			if (connect(client_socket, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-				perror("simplex-talk: connect");
+				perror("error in socket connection");
 				close(client_socket);
 				exit(1);
 			}
 
-			// cout << requestmessage << "\n";
-
-			send_new(client_socket, requestmessage, strlen(requestmessage));
+			send_new(client_socket, request_to_server, strlen(request_to_server));
 				
-			char *buf = (char *)malloc(MAX_BUFFER_SIZE);
+			char buf[MAX_BUFFER_SIZE];
+			memset(buf,'\0',sizeof(buf));
 
-			int recv_len = 0, bytes_received = 0;
-			while((recv_len = recv(client_socket, buf + bytes_received, MAX_BUFFER_SIZE - 1 - bytes_received, 0))>0)
+			int recv_len = 0; 
+			while((recv_len = recv(client_socket, buf, MAX_BUFFER_SIZE - 1, 0))>0)
 			{
-				bytes_received += recv_len;
-				// cout << "Received Length : " << recv_len << "\nBytes Received : " << bytes_received << "\n" << "Buffer\n";
-				// cout << "Buffer Length : " << strlen(buf);
+				send_new(new_s,buf,recv_len);
+				memset(buf,'\0',sizeof(buf));
 			}
 
-			// cout << "Receive Length : " << recv_len << "\n";
 			if(recv_len < 0)
 			{
-				perror("Error in socket connection");
+				perror("Error in receiving buffer");
 				exit(1);
 			}
 
-			// cout << buf << "\n\nLength of the buffer : " << strlen(buf);
-
-			send_new(new_s,buf,bytes_received);
-
 			close(client_socket);
 			close(new_s);
-			exit(1);
+			exit(0);
 		}
 
 		else
