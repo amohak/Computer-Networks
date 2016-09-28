@@ -1,0 +1,12 @@
+================================================================
+
+    README file for Project 2 - HTTP Proxy
+
+           Name: Avinash Mohak
+       Roll No.: 13177
+
+================================================================
+
+DESCRIBE YOUR CODE HERE AND DESIGN DECISIONS YOU MADE
+
+Dynamic-sized buffer (with a maximum size of 8KB) was used to receive the request from the client, using realloc function.
