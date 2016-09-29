@@ -57,49 +57,67 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 	generate_initial_seq_num(ctx);
 
-	STCPHeader *synPacket, *synAckPacket, *ackPacket, *inPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
-	// STCPHeader *synAckPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
-	// STCPHeader *ackPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
-	
+	STCPHeader *synPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
+	STCPHeader *synAckPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
+	STCPHeader *ackPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
+	STCPHeader *inPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
+
 	if(is_active)
 	{
-
 		synPacket->th_seq = ctx->initial_sequence_num;
 		synPacket->th_off = 5;
 		synPacket->th_flags = TH_SYN;
-		stcp_network_send(sd,synPacket,sizeof(synPacket),NULL);
+		stcp_network_send(sd,synPacket,sizeof(STCPHeader),NULL);
 
 		ctx->connection_state = SYN_SENT;
 
-		stcp_network_recv(sd,inPacket,sizeof(inPacket));
+		unsigned int event_flag = stcp_wait_for_event(sd,ANY_EVENT,NULL);
 
-		// if(synAckPacket->th_ack == ctx->initial_sequence_num + 1)
-		if(inPacket->th_flags & TH_SYN)
+		if(event_flag == NETWORK_DATA)
 		{
-			ctx->connection_state = SYN_RECD;
+			bool_t simultaneous_open = false;
 
-			synAckPacket->th_ack = inPacket->th_seq + 1;
-			synAckPacket->th_seq = ctx->initial_sequence_num;
-			synAckPacket->th_off = 5;
-			synAckPacket->th_flags = (TH_SYN | TH_ACK);
+			stcp_network_recv(sd,inPacket,sizeof(STCPHeader));
 
-			stcp_network_send(sd,synAckPacket,sizeof(synAckPacket),NULL);
+			// if(synAckPacket->th_ack == ctx->initial_sequence_num + 1)
+			if(inPacket->th_flags == TH_SYN)
+			{
+				simultaneous_open = true;
+				ctx->connection_state = SYN_RECD;
 
-			stcp_network_recv(sd,inPacket,sizeof(inPacket));
-		}
-		
-		if((inPacket->th_flags & (TH_SYN | TH_ACK))) 
-		{
-			ackPacket->th_seq = ctx->initial_sequence_num + 1;
-			ackPacket->th_ack = inPacket->th_seq + 1;
-			ackPacket->th_off = 5;
-			ackPacket->th_flags = TH_ACK;
+				synAckPacket->th_ack = inPacket->th_seq + 1;
+				synAckPacket->th_seq = ctx->initial_sequence_num;
+				synAckPacket->th_off = 5;
+				synAckPacket->th_flags = (TH_SYN | TH_ACK);
 
-			stcp_network_send(sd,ackPacket,sizeof(ackPacket),NULL);
+				stcp_network_send(sd,synAckPacket,sizeof(STCPHeader),NULL);
+
+				unsigned int event_flag = stcp_wait_for_event(sd,ANY_EVENT,NULL);
+
+				if(event_flag == NETWORK_DATA)	stcp_network_recv(sd,inPacket,sizeof(STCPHeader)), simultaneous_open = false;
+				else
+				{
+					//error handling
+				}
+			}
+			
+			if((inPacket->th_flags == (TH_SYN | TH_ACK)) && !simultaneous_open) 
+			{
+				ackPacket->th_seq = ctx->initial_sequence_num + 1;
+				ackPacket->th_ack = inPacket->th_seq + 1;
+				ackPacket->th_off = 5;
+				ackPacket->th_flags = TH_ACK;
+
+				stcp_network_send(sd,ackPacket,sizeof(STCPHeader),NULL);
+			}
+			else
+			{
+				//error handling
+			}
 		}
 		else
 		{
-			//error handling
+			//error handling : Non-network data
 		}
 	}
 
@@ -107,7 +125,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	{
 		ctx->connection_state = LISTEN;
 
-		stcp_network_recv(sd,synPacket,sizeof(synPacket));
+		stcp_network_recv(sd,synPacket,sizeof(STCPHeader));
 		if(synPacket->th_flags != TH_SYN)
 		{
 			//error handling
@@ -119,11 +137,11 @@ void transport_init(mysocket_t sd, bool_t is_active)
 			synAckPacket->th_off = 5;
 			synAckPacket->th_flags = (TH_SYN | TH_ACK);
 
-			stcp_network_send(sd,synAckPacket,sizeof(synAckPacket),NULL);
+			stcp_network_send(sd,synAckPacket,sizeof(STCPHeader),NULL);
 
 			ctx->connection_state = SYN_RECD;
 
-			stcp_network_recv(sd,ackPacket,sizeof(ackPacket));
+			stcp_network_recv(sd,ackPacket,sizeof(STCPHeader));
 			if(ackPacket->th_flags != TH_ACK || ackPacket->th_ack != ctx->initial_sequence_num + 1)
 			{
 				//error handling
