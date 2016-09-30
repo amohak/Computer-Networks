@@ -23,6 +23,24 @@
 
 #define MaxWindowSize 3072
 
+void h_to_n(STCPHeader *Header)
+{
+	Header->th_seq = htonl(Header->th_seq);
+	Header->th_ack = htonl(Header->th_ack);
+	Header->th_win = htons(Header->th_win);
+	Header->th_sum = htons(Header->th_sum);
+	Header->th_urp = htons(Header->th_urp);
+}
+
+void n_to_h(STCPHeader *Header)
+{
+	Header->th_seq = ntohl(Header->th_seq);
+	Header->th_ack = ntohl(Header->th_ack);
+	Header->th_win = ntohs(Header->th_win);
+	Header->th_sum = ntohs(Header->th_sum);
+	Header->th_urp = ntohs(Header->th_urp);
+}
+
 enum { 	CSTATE_ESTABLISHED = 1,
 		LISTEN = 2,
 		SYN_SENT = 3,
@@ -32,7 +50,7 @@ enum { 	CSTATE_ESTABLISHED = 1,
 		CLOSING = 7,
 		CLOSE_WAIT = 8,
 		LAST_ACK = 9,
-		CLOSED = 10,
+		CLOSED = 0
 	 };    /* you should have more states */  /* I have it already */
 
 
@@ -44,9 +62,10 @@ typedef struct
 	int connection_state;   /* state of the connection (established, etc.) */
 	tcp_seq initial_sequence_num;
 	
-	tcp_seq next_byte_expected;			// Receiving process
-	tcp_seq last_byte_acked;			// Sender process
-	tcp_seq next_sequence_num;			// Sender process
+	tcp_seq next_byte_expected;			
+	tcp_seq last_byte_acked;			
+	tcp_seq next_sequence_num;	
+	tcp_seq fin_seq_num;		
 
 	int AdvertisedWindowSize;
 	/* any other connection-wide global variables go here */
@@ -71,116 +90,136 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	generate_initial_seq_num(ctx);
 	ctx->AdvertisedWindowSize = MaxWindowSize;
 	ctx->next_sequence_num = ctx->initial_sequence_num;
+	ctx->connection_state = CLOSED;
 
 	STCPHeader *synPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
 	STCPHeader *synAckPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
 	STCPHeader *ackPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
 	STCPHeader *inPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
 
-	if(is_active)
+
+
+	while(ctx->connection_state == CLOSED)
 	{
-		synPacket->th_seq = ctx->initial_sequence_num;
-		synPacket->th_off = 5;
-		synPacket->th_flags = TH_SYN;
-		stcp_network_send(sd,synPacket,sizeof(STCPHeader),NULL);
-
-		ctx->connection_state = SYN_SENT;
-		ctx->next_sequence_num++;
-
-		unsigned int event_flag = stcp_wait_for_event(sd,ANY_EVENT,NULL);
-
-		if(event_flag == NETWORK_DATA)
+		if(is_active)
 		{
-			bool_t simultaneous_open = false;
+			synPacket->th_seq = ctx->initial_sequence_num;
+			synPacket->th_off = 5;
+			synPacket->th_flags = TH_SYN;
 
-			stcp_network_recv(sd,inPacket,sizeof(STCPHeader));
+			h_to_n(synPacket);
+			stcp_network_send(sd,synPacket,sizeof(STCPHeader),NULL);
 
-			// if(synAckPacket->th_ack == ctx->initial_sequence_num + 1)
-			if(inPacket->th_flags == TH_SYN)
-			{
-				simultaneous_open = true;
-				ctx->connection_state = SYN_RECD;
-
-				synAckPacket->th_ack = inPacket->th_seq + 1;
-				synAckPacket->th_seq = ctx->initial_sequence_num;
-				synAckPacket->th_off = 5;
-				synAckPacket->th_flags = (TH_SYN | TH_ACK);
-
-				stcp_network_send(sd,synAckPacket,sizeof(STCPHeader),NULL);
-
-				unsigned int event_flag = stcp_wait_for_event(sd,ANY_EVENT,NULL);
-
-				if(event_flag == NETWORK_DATA)	stcp_network_recv(sd,inPacket,sizeof(STCPHeader)), simultaneous_open = false;
-				else
-				{
-					//error handling : Non-network data
-				}
-			}
-			
-			if((inPacket->th_flags == (TH_SYN | TH_ACK)) && !simultaneous_open) 
-			{
-				ctx->next_byte_expected = inPacket->th_ack;
-
-				ackPacket->th_seq = ctx->initial_sequence_num + 1;
-				ackPacket->th_ack = inPacket->th_seq + 1;
-				ackPacket->th_off = 5;
-				ackPacket->th_flags = TH_ACK;
-
-				ctx->last_byte_acked = inPacket->th_ack;
-
-				stcp_network_send(sd,ackPacket,sizeof(STCPHeader),NULL);
-			}
-			else
-			{
-				//error handling
-			}
-		}
-		else
-		{
-			//error handling : Non-network data
-		}
-	}
-
-	else
-	{
-		ctx->connection_state = LISTEN;
-
-		stcp_network_recv(sd,synPacket,sizeof(STCPHeader));
-		if(synPacket->th_flags != TH_SYN)
-		{
-			//error handling
-		}
-		else
-		{
+			ctx->connection_state = SYN_SENT;
 			ctx->next_sequence_num++;
-
-			synAckPacket->th_ack = synPacket->th_seq + 1;
-			synAckPacket->th_seq = ctx->initial_sequence_num;
-			synAckPacket->th_off = 5;
-			synAckPacket->th_flags = (TH_SYN | TH_ACK);
-
-			stcp_network_send(sd,synAckPacket,sizeof(STCPHeader),NULL);
-
-			ctx->connection_state = SYN_RECD;
 
 			unsigned int event_flag = stcp_wait_for_event(sd,ANY_EVENT,NULL);
 
 			if(event_flag == NETWORK_DATA)
 			{
-				stcp_network_recv(sd,ackPacket,sizeof(STCPHeader));
-				if(ackPacket->th_flags != TH_ACK || ackPacket->th_ack != ctx->initial_sequence_num + 1)
+				bool_t simultaneous_open = false;
+
+				stcp_network_recv(sd,inPacket,sizeof(STCPHeader));
+				n_to_h(inPacket);
+				// if(synAckPacket->th_ack == ctx->initial_sequence_num + 1)
+				
+				if((inPacket->th_flags ^ TH_SYN) == 0)
 				{
-					//error handling
+					simultaneous_open = true;
+					ctx->connection_state = SYN_RECD;
+
+					synAckPacket->th_ack = inPacket->th_seq + 1;
+					synAckPacket->th_seq = ctx->initial_sequence_num;
+					synAckPacket->th_off = 5;
+					synAckPacket->th_flags = (TH_SYN | TH_ACK);
+
+					h_to_n(synAckPacket);
+					stcp_network_send(sd,synAckPacket,sizeof(STCPHeader),NULL);
+
+					unsigned int event_flag = stcp_wait_for_event(sd,ANY_EVENT,NULL);
+
+					if(event_flag == NETWORK_DATA)
+					{
+						stcp_network_recv(sd,inPacket,sizeof(STCPHeader));
+						n_to_h(inPacket);
+						simultaneous_open = false;
+					}
+					else
+					{
+						//error handling : Non-network data
+					}
+				}
+				
+				if(((inPacket->th_flags ^ (TH_SYN | TH_ACK)) == 0) && !simultaneous_open) 
+				{
+					ctx->next_byte_expected = inPacket->th_seq + 1;
+
+					ackPacket->th_seq = ctx->initial_sequence_num + 1;
+					ackPacket->th_ack = inPacket->th_seq + 1;
+					ackPacket->th_off = 5;
+					ackPacket->th_flags = TH_ACK;
+
+					ctx->last_byte_acked = inPacket->th_ack;
+
+					h_to_n(ackPacket);
+					stcp_network_send(sd,ackPacket,sizeof(STCPHeader),NULL);
 				}
 				else
 				{
-					ctx->next_byte_expected = ackPacket->th_seq;
-					ctx->last_byte_acked = ackPacket->th_ack;
+					//error handling
 				}
 			}
 			else
 			{
-				// Non-Network Data
+				//error handling : Non-network data
+			}
+		}
+
+		else
+		{
+			ctx->connection_state = LISTEN;
+
+			stcp_network_recv(sd,synPacket,sizeof(STCPHeader));
+			n_to_h(synPacket);
+			if(synPacket->th_flags ^ TH_SYN)
+			{
+				//error handling
+			}
+			else
+			{
+				ctx->next_sequence_num++;
+
+				synAckPacket->th_ack = synPacket->th_seq + 1;
+				synAckPacket->th_seq = ctx->initial_sequence_num;
+				synAckPacket->th_off = 5;
+				synAckPacket->th_flags = (TH_SYN | TH_ACK);
+
+				h_to_n(synAckPacket);
+				stcp_network_send(sd,synAckPacket,sizeof(STCPHeader),NULL);
+
+				ctx->connection_state = SYN_RECD;
+
+				unsigned int event_flag = stcp_wait_for_event(sd,ANY_EVENT,NULL);
+
+				if(event_flag == NETWORK_DATA)
+				{
+					stcp_network_recv(sd,ackPacket,sizeof(STCPHeader));
+					n_to_h(ackPacket);
+
+					if(ackPacket->th_flags != TH_ACK || ackPacket->th_ack != ctx->initial_sequence_num + 1)
+					{
+						//error handling
+					}
+					else
+					{
+						ctx->next_byte_expected = ackPacket->th_seq;
+						ctx->last_byte_acked = ackPacket->th_ack;
+					}
+				}
+				else
+				{
+					// Non-Network Data
+				}
 			}
 		}
 	}
@@ -191,14 +230,18 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	 * if connection fails; to do so, just set errno appropriately (e.g. to
 	 * ECONNREFUSED, etc.) before calling the function.
 	 */
+
 	ctx->connection_state = CSTATE_ESTABLISHED;
 	stcp_unblock_application(sd);
 
-	// printf("%d %d %d %d\n",ctx->initial_sequence_num,ctx->next_sequence_num,ctx->last_byte_acked,ctx->next_byte_expected);
 	control_loop(sd, ctx);
 
 	/* do any cleanup here */
 	free(ctx);
+	free(synPacket);
+	free(synAckPacket);
+	free(inPacket);
+	free(ackPacket);
 }
 
 
@@ -229,7 +272,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 	assert(ctx);
 	assert(!ctx->done);
 
-
 	while (!ctx->done)
 	{
 		char sendBuffer[MaxWindowSize], recvBuffer[MaxWindowSize];
@@ -257,13 +299,15 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					DataPacketHeader->th_win = MaxWindowSize;
 
 					ctx->next_sequence_num += app_rcvd;
+
+					h_to_n(DataPacketHeader);
 					stcp_network_send(sd,DataPacketHeader,sizeof(STCPHeader),sendBuffer,app_rcvd,NULL);
 					free(DataPacketHeader);
 				}
 			}
 		}
 
-		 if(event & NETWORK_DATA)
+		if(event & NETWORK_DATA)
 		{
 			int recvBufferSize = stcp_network_recv(sd,recvBuffer,MaxWindowSize);
 			if(recvBufferSize>0)
@@ -274,10 +318,22 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				int offset = TCP_DATA_START(recvBuffer);			// Header size
 
 				memcpy(DataPacketHeader,recvBuffer,sizeof(STCPHeader));
+				n_to_h(DataPacketHeader);
 
 				if(DataPacketHeader->th_flags & TH_ACK)
 				{
 					ctx->last_byte_acked = DataPacketHeader->th_ack;
+
+					if(DataPacketHeader->th_ack == ctx->fin_seq_num + 1)
+					{
+						if(ctx->connection_state == FIN_WAIT_1)
+							ctx->connection_state = FIN_WAIT_2;
+						if((ctx->connection_state == LAST_ACK) || (ctx->connection_state == CLOSING))
+						{
+							ctx->connection_state = CLOSED;
+							ctx->done = TRUE;
+						}
+					}
 				}
 
 				int data_size = recvBufferSize - offset;
@@ -304,23 +360,58 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 						//error handling -- Packet loss probably -- not to be handled
 					}
 
-					ackPacketHeader->th_seq = ctx->next_sequence_num;
-					ackPacketHeader->th_ack = ctx->next_byte_expected;
-					ackPacketHeader->th_flags = TH_ACK;
-					ackPacketHeader->th_off = 5;
-					ackPacketHeader->th_win = MaxWindowSize;
-
-					stcp_network_send(sd,ackPacketHeader,sizeof(STCPHeader),NULL);
 				}
+
+				if(DataPacketHeader->th_flags & TH_FIN)
+				{
+					stcp_fin_received(sd);
+
+					ctx->next_byte_expected++;
+					if(ctx->connection_state == CSTATE_ESTABLISHED)
+						ctx->connection_state = CLOSE_WAIT;
+					if(ctx->connection_state == FIN_WAIT_1)
+						ctx->connection_state = CLOSING;
+					if(ctx->connection_state == FIN_WAIT_2)
+					{
+						ctx->connection_state = CLOSED;
+						ctx->done = TRUE;
+					}
+				}
+
+				ackPacketHeader->th_seq = ctx->next_sequence_num;
+				ackPacketHeader->th_ack = ctx->next_byte_expected;
+				ackPacketHeader->th_flags = TH_ACK;
+				ackPacketHeader->th_off = 5;
+				ackPacketHeader->th_win = MaxWindowSize;
+
+				h_to_n(ackPacketHeader);
+				stcp_network_send(sd,ackPacketHeader,sizeof(STCPHeader),NULL);
 			}
 		}
 
 		if(event & APP_CLOSE_REQUESTED)
 		{
-			
+			STCPHeader *finPacket = (STCPHeader *) calloc(1,sizeof(STCPHeader));
+			finPacket->th_seq = ctx->next_sequence_num;
+			finPacket->th_ack = ctx->next_byte_expected;
+			finPacket->th_flags = TH_FIN;
+			finPacket->th_off = 5;
+			finPacket->th_win = MaxWindowSize;
+
+			h_to_n(finPacket);
+			stcp_network_send(sd,finPacket,sizeof(STCPHeader),NULL);
+
+			ctx->fin_seq_num = ctx->next_sequence_num;
+			ctx->next_sequence_num++;
+
+			if(ctx->connection_state==CSTATE_ESTABLISHED)
+				ctx->connection_state = FIN_WAIT_1;
+			else if(ctx->connection_state == CLOSE_WAIT)
+				ctx->connection_state = LAST_ACK;
 		}
-		/* etc. */
+
 	}
+
 }
 
 
